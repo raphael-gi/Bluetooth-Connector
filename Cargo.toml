@@ -1,0 +1,10 @@
+[package]
+name = "rustybluetooth"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bluer = { version = "0.17.3", features = ["full"] }
+dialoguer = "0.11.0"
+futures = "0.3.31"
+tokio = "1.41.0"
