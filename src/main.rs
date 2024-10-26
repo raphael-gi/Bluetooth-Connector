@@ -1,8 +1,8 @@
-use bluer::{Adapter, Device};
-use dialoguer::Select;
+use bluer::{Device, Error, ErrorKind, Result};
+use dialoguer::{Confirm, Select};
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> bluer::Result<()> {
+async fn main() -> Result<()> {
     let session = bluer::Session::new().await?;
     let adapter = session.default_adapter().await?;
 
@@ -18,55 +18,58 @@ async fn main() -> bluer::Result<()> {
                 continue;
             }
             connected_devices.push(device.clone());
-            let name = match device.name().await {
-                Ok(Some(name)) => name,
-                _ => device.address().to_string()
-            };
-            options.push(format!("Disconnect: {}", name));
+            options.push(format!("Disconnect: {}", get_name(device).await));
         }
     }
 
-    let selected = Select::new()
-        .items(&options)
-        .default(0)
-        .interact_opt()
-        .unwrap();
+    loop {
+        let selection = Select::new()
+            .items(&options)
+            .default(0)
+            .interact_opt();
 
-    if selected.is_none() {
-        return Ok(());
-    }
+        let selected = match selection {
+            Ok(Some(selected)) => selected,
+            Ok(None) => return error(ErrorKind::Failed, ""),
+            Err(_) => return error(ErrorKind::Failed, "Failed to select an option")
+        };
 
-    match selected.unwrap() {
-        0 => display_devices(devices).await?,
-        _ => {
-            let device = match connected_devices.get(selected.unwrap() - 1) {
-                Some(device) => device.clone(),
-                None => panic!("Index of connected device out of range")
-            };
-            let _ = disconnect_from_device(device).await;
-            return Ok(());
+        let res = match selected {
+            0 => display_devices(devices.clone()).await,
+            _ => {
+                let device = match connected_devices.get(selected - 1) {
+                    Some(device) => device.clone(),
+                    None => panic!("Index of connected device out of range")
+                };
+                disconnect_from_device(device).await
+            }
+        };
+
+        if res.is_ok() {
+            break;
         }
     }
 
     Ok(())
 }
 
-async fn display_devices(devices: Vec<Device>) -> bluer::Result<()> {
+async fn display_devices(devices: Vec<Device>) -> Result<()> {
     let mut names: Vec<String> = Vec::new();
 
     for device in &devices {
-        let name = match device.name().await {
-            Ok(Some(name)) => name,
-            _ => device.address().to_string()
-        };
-        names.push(name);
+        names.push(get_name(device).await);
     }
 
-    let selected = Select::new()
+    let selection = Select::new()
         .default(0)
         .items(&names)
-        .interact()
-        .unwrap();
+        .interact_opt();
+
+    let selected = match selection {
+        Ok(Some(selected)) => selected,
+        Ok(None) => return error(ErrorKind::Failed, ""),
+        Err(..) => return error(ErrorKind::Failed, "Failed to select an option")
+    };
 
     match devices.get(selected) {
         Some(device) => connect_to_device(device).await?,
@@ -76,16 +79,43 @@ async fn display_devices(devices: Vec<Device>) -> bluer::Result<()> {
     Ok(())
 }
 
-async fn connect_to_device(device: &Device) -> bluer::Result<()> {
-    match device.connect().await {
-        Ok(_) => println!("Connected to: {:?}", device.name().await?),
-        Err(_) => println!("Failed to connect to device")
+async fn connect_to_device(device: &Device) -> Result<()> {
+    let device_name = get_name(device).await;
+    loop {
+        let connection_res = device.connect().await;
+        if connection_res.is_ok() {
+            break;
+        }
+
+        let confirmation = Confirm::new()
+            .with_prompt(format!("Connection to device {} failed. Try again?", device_name))
+            .interact();
+
+        match confirmation {
+            Ok(response) => {
+                if !response {
+                    break;
+                }
+            },
+            Err(..) => return error(ErrorKind::Failed, "")
+        }
     }
 
     Ok(())
 }
 
-async fn disconnect_from_device(device: Device) -> bluer::Result<()> {
+async fn get_name(device: &Device) -> String {
+    match device.name().await {
+        Ok(Some(name)) => name,
+        _ => device.address().to_string()
+    }
+}
+
+async fn disconnect_from_device(device: Device) -> Result<()> {
     device.disconnect().await
+}
+
+fn error(kind: ErrorKind, message: &str) -> Result<()> {
+    Err(Error { kind, message: message.to_string() })
 }
 
