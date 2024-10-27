@@ -82,8 +82,10 @@ async fn display_devices(devices: Vec<Device>) -> Result<()> {
 async fn connect_to_device(device: &Device) -> Result<()> {
     let device_name = get_name(device).await;
     loop {
+        println!("Trying to connect to {}", device_name);
         let connection_res = device.connect().await;
         if connection_res.is_ok() {
+            println!("Connected!");
             break;
         }
 
