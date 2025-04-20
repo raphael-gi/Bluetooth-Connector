@@ -1,6 +1,6 @@
 cargo build --release
 
-default_package_name="bluetooth"
+default_package_name="kenji-bluetooth"
 read -p "Package name: ($default_package_name)" package_name
 
 if [[ -z "$package_name" ]]
@@ -34,5 +34,40 @@ else
 		exit 1
 fi
 
-echo $script_content | sudo tee -a $package_dir/launch.sh > /dev/null
+echo "$script_content" | sudo tee -a $package_dir/launch.sh > /dev/null
 sudo chmod +x $package_dir/launch.sh
+
+desktop_entry='
+[Desktop Entry]
+Name=Bluetooth
+Comment=Connect to your devices with ease using the Terminal
+Exec='$package_dir'/launch.sh
+Icon=
+Type=Application
+Categories=Bluetooth;System;Settings
+Terminal=true
+Keywords=Bluetooth;System;Settings
+'
+
+while true; do
+		read -p "Would you like to create a desktop entry? [Y,n]" yn
+		if [[ -z "$yn" ]]
+		then
+				break
+		fi
+		case $yn in
+				[Yy]* ) break;;
+				[Nn]* ) exit;;
+				* ) echo "Please answer yes or no";;
+		esac
+done
+default_desktop_entry_path="/usr/share/applications"
+read -p "Desktop entry path (default $default_desktop_entry_path)" desktop_entry_path
+
+if [[ -z "$desktop_entry_path" ]]
+then
+		desktop_entry_path=$default_desktop_entry_path
+fi
+
+echo "$desktop_entry" | sudo tee -a $desktop_entry_path/$package_name.desktop > /dev/null
+
