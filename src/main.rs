@@ -1,5 +1,10 @@
 use bluer::{Device, Error, ErrorKind, Result};
 use dialoguer::{Confirm, Select};
+use pairing::pair_new_device;
+use util::get_name;
+
+mod pairing;
+mod util;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
@@ -10,7 +15,7 @@ async fn main() -> Result<()> {
     let devices: Vec<Device> = addresses.iter().map(|address| adapter.device(*address).unwrap()).collect();
     let mut connected_devices: Vec<Device> = Vec::new();
 
-    let mut options = vec![String::from("Connect")];
+    let mut options = vec![String::from("Connect"), String::from("Pair new Device")];
 
     for device in &devices {
         if let Ok(connected) = device.is_connected().await {
@@ -36,6 +41,7 @@ async fn main() -> Result<()> {
 
         let res = match selected {
             0 => display_devices(devices.clone()).await,
+            1 => pair_new_device(&adapter).await,
             _ => {
                 let device = match connected_devices.get(selected - 1) {
                     Some(device) => device.clone(),
@@ -52,6 +58,7 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+
 
 async fn display_devices(devices: Vec<Device>) -> Result<()> {
     let mut names: Vec<String> = Vec::new();
@@ -104,13 +111,6 @@ async fn connect_to_device(device: &Device) -> Result<()> {
     }
 
     Ok(())
-}
-
-async fn get_name(device: &Device) -> String {
-    match device.name().await {
-        Ok(Some(name)) => name,
-        _ => device.address().to_string()
-    }
 }
 
 async fn disconnect_from_device(device: Device) -> Result<()> {
